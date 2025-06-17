@@ -130,12 +130,86 @@ const achievements = [
 export default function Home() {
   const { darkMode } = useTheme();
   const parallaxRef = useRef(null);
+  const projectsSectionRef = useRef(null)
   const [isVisible, setIsVisible] = useState(false);
   const [activeProject, setActiveProject] = useState(0);
   const [activeCategory, setActiveCategory] = useState("All");
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [animationsInitialized, setAnimationsInitialized] = useState(false)
+  const [animatedProjects, setAnimatedProjects] = useState(false) // Track if projects have been animated
 
+  // Contact form state
+  const [contactForm, setContactForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState(null) // 'success', 'error', or null
+
+  // Handle contact form input changes
+  const handleContactInputChange = (e) => {
+    const { name, value } = e.target
+    setContactForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  // Handle contact form submission
+  const handleContactSubmit = async (e) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    setSubmitStatus(null)
+
+    try {
+      // Validate form
+      if (
+        !contactForm.name.trim() ||
+        !contactForm.email.trim() ||
+        !contactForm.subject.trim() ||
+        !contactForm.message.trim()
+      ) {
+        throw new Error("Please fill in all fields")
+      }
+
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(contactForm.email)) {
+        throw new Error("Please enter a valid email address")
+      }
+
+      // Submit to your existing message API
+      const response = await api.post("/messages", {
+        name: contactForm.name.trim(),
+        email: contactForm.email.trim(),
+        subject: contactForm.subject.trim(),
+        message: contactForm.message.trim(),
+      })
+
+      if (response.data.success) {
+        setSubmitStatus("success")
+        // Reset form
+        setContactForm({
+          name: "",
+          email: "",
+          subject: "",
+          message: "",
+        })
+      } else {
+        throw new Error(response.data.message || "Failed to send message")
+      }
+    } catch (error) {
+      console.error("Contact form error:", error)
+      setSubmitStatus("error")
+    } finally {
+      setIsSubmitting(false)
+      // Clear status after 5 seconds
+      setTimeout(() => setSubmitStatus(null), 5000)
+    }
+  }
    // Fetch projects from API
   useEffect(() => {
     const fetchProjects = async () => {
@@ -148,12 +222,7 @@ export default function Home() {
           "Featured projects:",
           data.filter((p) => p.featured)
         );
-        console.log(
-          console.log(
-            "Non-featured project details:",
-            projects.filter((p) => p.featured === false)[0]
-          )
-        );
+        console.log("Non-featured projects:", data.filter(p => !p.featured));
         setProjects(data);
       } catch (error) {
         console.error("Failed to fetch projects:", error);
@@ -219,9 +288,27 @@ export default function Home() {
       ".fade-in, .slide-up, .slide-in-left, .slide-in-right, .scale-in, .skill-bar"
     );
     elements.forEach((el) => observer.observe(el));
+    // Observe the projects section specifically
+    if (projectsSectionRef.current) {
+      observer.observe(projectsSectionRef.current)
+    }
 
     return () => observer.disconnect();
   }, []);
+  
+   // Force animation of project cards when they're loaded
+  useEffect(() => {
+    if (!loading && projects.length > 0) {
+      // Force animation of project cards after a short delay
+      setTimeout(() => {
+        const projectCards = document.querySelectorAll(".project-card")
+        projectCards.forEach((card) => {
+          card.classList.add("animate")
+        })
+        setAnimatedProjects(true)
+      }, 500)
+    }
+  }, [loading, projects])
 
   // Project carousel auto-rotation
   useEffect(() => {
@@ -254,8 +341,10 @@ export default function Home() {
   //       );
   const filteredProjects =
   activeCategory === "All"
-    ? projects // Show all projects regardless of featured status
-    : projects.filter((p) => p.tags && p.tags.includes(activeCategory))
+    ? projects.filter((p) => !p.featured)
+    : projects.filter(
+        (p) => !p.featured && p.tags && p.tags.includes(activeCategory)
+      );
 
   // Get unique categories
   //const categories = ["All", ...new Set(projects.map((p) => p.category))];
@@ -747,14 +836,15 @@ export default function Home() {
       {/* Projects Section - Updated to use real data */}
       {/* Projects Section - Updated to use real data */}
       {/* Projects Section - Updated to use real data */}
-      <section id="projects" className="py-32 relative overflow-hidden">
+      {/* Projects Section - Updated to use real data */}
+      <section id="projects" className="py-32 relative overflow-hidden" ref={projectsSectionRef}>
         {/* Background elements */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-50/50 to-transparent dark:via-slate-900/50"></div>
         <div className="absolute -top-32 left-1/2 w-96 h-96 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 blur-3xl animate-pulse-slow"></div>
 
         <div className="max-w-7xl mx-auto px-4 relative z-10">
           {/* Section header */}
-          <div className="text-center mb-20 fade-in">
+          <div className="text-center mb-20 fade-in animate">
             <div className="inline-block relative">
               <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur-xl opacity-30 dark:opacity-50 animate-pulse"></div>
               <h2 className="relative text-5xl md:text-6xl font-black mb-6">
@@ -765,8 +855,7 @@ export default function Home() {
             </div>
             <div className="w-24 h-1 bg-gradient-to-r from-purple-600 to-blue-600 mx-auto mb-6 rounded-full"></div>
             <p className="text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              A showcase of projects that demonstrate my skills and passion for
-              innovation
+              A showcase of projects that demonstrate my skills and passion for innovation
             </p>
           </div>
 
@@ -788,25 +877,17 @@ export default function Home() {
                     <div className="overflow-hidden rounded-3xl">
                       <div
                         className="flex transition-transform duration-700 ease-in-out"
-                        style={{
-                          transform: `translateX(-${activeProject * 100}%)`,
-                        }}
+                        style={{ transform: `translateX(-${activeProject * 100}%)` }}
                       >
                         {featuredProjects.map((project, index) => (
-                          <div
-                            key={project._id}
-                            className="w-full flex-shrink-0"
-                          >
+                          <div key={project._id} className="w-full flex-shrink-0">
                             <div className="grid lg:grid-cols-2 gap-12 items-center p-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-white/30 dark:border-slate-700/50">
                               {/* Project image */}
                               <div className="relative group">
                                 <div className="absolute -inset-4 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                                 <div className="relative overflow-hidden rounded-2xl">
                                   <img
-                                    src={
-                                      project.image?.url ||
-                                      "/placeholder.svg?height=400&width=600"
-                                    }
+                                    src={project.image?.url || "/placeholder.svg?height=400&width=600"}
                                     alt={project.title}
                                     className="w-full h-80 object-cover transition-transform duration-700 group-hover:scale-110"
                                   />
@@ -910,11 +991,10 @@ export default function Home() {
               {/* Project category filter */}
               <div className="mb-12">
                 <h3 className="text-2xl font-bold mb-8 text-center text-slate-800 dark:text-slate-200">
-                  {featuredProjects.length > 0
-                    ? "More Projects"
-                    : "My Projects"}
+                  {featuredProjects.length > 0 ? "More Projects" : "My Projects"}
                 </h3>
 
+                {/* Category filters - unchanged */}
                 {categories.length > 1 && (
                   <div className="flex flex-wrap justify-center gap-4 mb-12">
                     {categories.map((category) => (
@@ -933,22 +1013,20 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* All projects grid */}
+                {/* All projects grid - FIXED HERE */}
                 {filteredProjects.length > 0 ? (
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {console.log("Rendering filtered projects:", filteredProjects)}
                     {filteredProjects.map((project, index) => (
                       <div
                         key={project._id}
-                        className="slide-up group relative backdrop-blur-md rounded-3xl overflow-hidden border border-white/30 dark:border-slate-700/50 hover:border-purple-400/50 dark:hover:border-purple-400/50 transition-all duration-500 hover:shadow-2xl hover:shadow-purple-500/10 dark:hover:shadow-purple-500/20 hover:-translate-y-2 bg-white/70 dark:bg-slate-900/70"
+                        className={`project-card group relative backdrop-blur-md rounded-3xl overflow-hidden border border-white/30 dark:border-slate-700/50 hover:border-purple-400/50 dark:hover:border-purple-400/50 transition-all duration-500 hover:shadow-2xl hover:shadow-purple-500/10 dark:hover:shadow-purple-500/20 hover:-translate-y-2 bg-white/70 dark:bg-slate-900/70 animate ${animatedProjects ? "opacity-100" : "opacity-0"}`}
                         style={{ transitionDelay: `${index * 150}ms` }}
                       >
                         {/* Project image */}
                         <div className="relative overflow-hidden h-48">
                           <img
-                            src={
-                              project.image?.url ||
-                              "/placeholder.svg?height=400&width=600"
-                            }
+                            src={project.image?.url || "/placeholder.svg?height=400&width=600" || "/placeholder.svg"}
                             alt={project.title}
                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                           />
@@ -1015,15 +1093,13 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <p className="text-gray-500">
-                      No projects available in this category.
-                    </p>
+                    <p className="text-gray-500">No projects available in this category.</p>
                   </div>
                 )}
               </div>
 
-              {/* View all projects CTA */}
-              <div className="text-center mt-16 fade-in">
+              {/* View all projects CTA - unchanged */}
+              <div className="text-center mt-16 fade-in animate">
                 <a
                   href="https://github.com/yourusername"
                   target="_blank"
@@ -1040,6 +1116,7 @@ export default function Home() {
         </div>
       </section>
       {/* Contact Section - Enhanced */}
+      {/* Contact Section - Enhanced with Working Form */}
       <section
         id="contact"
         className="py-32 relative overflow-hidden bg-gradient-to-b from-slate-100/50 to-white/80 dark:from-slate-900/50 dark:to-slate-950/80"
@@ -1061,40 +1138,76 @@ export default function Home() {
             </div>
             <div className="w-24 h-1 bg-gradient-to-r from-purple-600 to-blue-600 mx-auto mb-6 rounded-full"></div>
             <p className="text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              Ready to bring your next project to life? Let's discuss how we can
-              work together.
+              Ready to bring your next project to life? Let's discuss how we can work together.
             </p>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-16 items-start">
-            {/* Contact form */}
+            {/* Contact form - Now Functional */}
             <div className="scale-in">
               <div className="relative">
                 <div className="absolute -inset-4 bg-gradient-to-r from-purple-600/20 via-pink-600/20 to-blue-600/20 rounded-3xl blur-2xl opacity-70 animate-pulse-slow"></div>
                 <div className="relative bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-white/30 dark:border-slate-700/50 p-8 shadow-2xl">
                   <div className="mb-8">
-                    <h3 className="text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
-                      Send me a message
-                    </h3>
-                    <p className="text-slate-600 dark:text-slate-400">
-                      I'll get back to you within 24 hours.
-                    </p>
+                    <h3 className="text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">Send me a message</h3>
+                    <p className="text-slate-600 dark:text-slate-400">I'll get back to you within 24 hours.</p>
                   </div>
 
-                  <form className="space-y-6">
+                  {/* Success/Error Messages */}
+                  {submitStatus === "success" && (
+                    <div className="mb-6 p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                        <p className="text-green-700 dark:text-green-300 font-medium">
+                          Message sent successfully! I'll get back to you soon.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {submitStatus === "error" && (
+                    <div className="mb-6 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </div>
+                        <p className="text-red-700 dark:text-red-300 font-medium">
+                          Failed to send message. Please try again.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleContactSubmit} className="space-y-6">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="group">
                         <label
                           htmlFor="name"
                           className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3"
                         >
-                          Full Name
+                          Full Name *
                         </label>
                         <div className="relative">
                           <input
                             type="text"
                             id="name"
-                            className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400"
+                            name="name"
+                            value={contactForm.name}
+                            onChange={handleContactInputChange}
+                            required
+                            disabled={isSubmitting}
+                            className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 disabled:opacity-50"
                             placeholder="Your full name"
                           />
                           <div className="absolute bottom-0 left-0 h-0.5 w-0 bg-gradient-to-r from-purple-600 to-blue-600 group-focus-within:w-full transition-all duration-500"></div>
@@ -1105,13 +1218,18 @@ export default function Home() {
                           htmlFor="email"
                           className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3"
                         >
-                          Email Address
+                          Email Address *
                         </label>
                         <div className="relative">
                           <input
                             type="email"
                             id="email"
-                            className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400"
+                            name="email"
+                            value={contactForm.email}
+                            onChange={handleContactInputChange}
+                            required
+                            disabled={isSubmitting}
+                            className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 disabled:opacity-50"
                             placeholder="your@email.com"
                           />
                           <div className="absolute bottom-0 left-0 h-0.5 w-0 bg-gradient-to-r from-purple-600 to-blue-600 group-focus-within:w-full transition-all duration-500"></div>
@@ -1124,13 +1242,18 @@ export default function Home() {
                         htmlFor="subject"
                         className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3"
                       >
-                        Subject
+                        Subject *
                       </label>
                       <div className="relative">
                         <input
                           type="text"
                           id="subject"
-                          className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400"
+                          name="subject"
+                          value={contactForm.subject}
+                          onChange={handleContactInputChange}
+                          required
+                          disabled={isSubmitting}
+                          className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 disabled:opacity-50"
                           placeholder="What's this about?"
                         />
                         <div className="absolute bottom-0 left-0 h-0.5 w-0 bg-gradient-to-r from-purple-600 to-blue-600 group-focus-within:w-full transition-all duration-500"></div>
@@ -1142,13 +1265,18 @@ export default function Home() {
                         htmlFor="message"
                         className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3"
                       >
-                        Message
+                        Message *
                       </label>
                       <div className="relative">
                         <textarea
                           id="message"
+                          name="message"
+                          value={contactForm.message}
+                          onChange={handleContactInputChange}
+                          required
+                          disabled={isSubmitting}
                           rows={6}
-                          className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 resize-none"
+                          className="w-full px-6 py-4 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 outline-none transition-all duration-300 text-slate-800 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 resize-none disabled:opacity-50"
                           placeholder="Tell me about your project or just say hello..."
                         ></textarea>
                         <div className="absolute bottom-0 left-0 h-0.5 w-0 bg-gradient-to-r from-purple-600 to-blue-600 group-focus-within:w-full transition-all duration-500"></div>
@@ -1157,13 +1285,23 @@ export default function Home() {
 
                     <button
                       type="submit"
-                      className="group relative w-full py-4 px-8 rounded-2xl font-semibold text-lg overflow-hidden transition-all duration-300 hover:scale-105"
+                      disabled={isSubmitting}
+                      className="group relative w-full py-4 px-8 rounded-2xl font-semibold text-lg overflow-hidden transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
                       <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 animate-gradient-x"></div>
                       <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 animate-gradient-x opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300"></div>
                       <span className="relative z-10 text-white flex items-center justify-center gap-3">
-                        Send Message
-                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
+                        {isSubmitting ? (
+                          <>
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            Send Message
+                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
+                          </>
+                        )}
                       </span>
                     </button>
                   </form>
@@ -1171,34 +1309,28 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Contact info and social links */}
+            {/* Contact info and social links - Keep existing content */}
             <div className="slide-in-right space-y-8">
               {/* Contact methods */}
               <div className="backdrop-blur-md bg-white/70 dark:bg-slate-900/70 rounded-3xl p-8 border border-white/30 dark:border-slate-700/50 shadow-xl">
-                <h3 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">
-                  Get in Touch
-                </h3>
+                <h3 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">Get in Touch</h3>
 
                 <div className="space-y-6">
                   <a
-                    href="mailto:alex@example.com"
+                    href="mailto:sonidhruv557@gmail.com"
                     className="group flex items-center gap-4 p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-800/50 hover:bg-purple-50/50 dark:hover:bg-purple-900/20 transition-all duration-300"
                   >
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                       <Mail className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900 dark:text-slate-100">
-                        Email
-                      </div>
-                      <div className="text-slate-600 dark:text-slate-400">
-                        alex@example.com
-                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-slate-100">Email</div>
+                      <div className="text-slate-600 dark:text-slate-400">sonidhruv557@gmail.com</div>
                     </div>
                   </a>
 
                   <a
-                    href="https://linkedin.com/in/alexjohnson"
+                    href="https://linkedin.com/in/dhruvsoni"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group flex items-center gap-4 p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-800/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all duration-300"
@@ -1207,17 +1339,13 @@ export default function Home() {
                       <LinkedIn className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900 dark:text-slate-100">
-                        LinkedIn
-                      </div>
-                      <div className="text-slate-600 dark:text-slate-400">
-                        Connect with me
-                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-slate-100">LinkedIn</div>
+                      <div className="text-slate-600 dark:text-slate-400">Connect with me</div>
                     </div>
                   </a>
 
                   <a
-                    href="https://github.com/alexjohnson"
+                    href="https://github.com/dhruvsoni"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group flex items-center gap-4 p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-300"
@@ -1226,12 +1354,8 @@ export default function Home() {
                       <GitHub className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900 dark:text-slate-100">
-                        GitHub
-                      </div>
-                      <div className="text-slate-600 dark:text-slate-400">
-                        View my code
-                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-slate-100">GitHub</div>
+                      <div className="text-slate-600 dark:text-slate-400">View my code</div>
                     </div>
                   </a>
                 </div>
@@ -1239,9 +1363,7 @@ export default function Home() {
 
               {/* Availability status */}
               <div className="backdrop-blur-md bg-white/70 dark:bg-slate-900/70 rounded-3xl p-8 border border-white/30 dark:border-slate-700/50 shadow-xl">
-                <h3 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">
-                  Current Status
-                </h3>
+                <h3 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">Current Status</h3>
 
                 <div className="flex items-center gap-4 mb-6">
                   <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
@@ -1251,9 +1373,8 @@ export default function Home() {
                 </div>
 
                 <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
-                  I'm currently accepting new freelance projects and would love
-                  to help bring your ideas to life. Let's discuss how we can
-                  work together to create something amazing.
+                  I'm currently accepting new freelance projects and would love to help bring your ideas to life. Let's
+                  discuss how we can work together to create something amazing.
                 </p>
 
                 <div className="space-y-3">
@@ -1274,13 +1395,11 @@ export default function Home() {
 
               {/* Social links */}
               <div className="backdrop-blur-md bg-white/70 dark:bg-slate-900/70 rounded-3xl p-8 border border-white/30 dark:border-slate-700/50 shadow-xl">
-                <h3 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">
-                  Follow My Journey
-                </h3>
+                <h3 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">Follow My Journey</h3>
 
                 <div className="grid grid-cols-3 gap-4">
                   <a
-                    href="mailto:alex@example.com"
+                    href="mailto:sonidhruv557@gmail.com"
                     className="group relative w-16 h-16 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center hover:shadow-lg hover:shadow-purple-500/25 transition-all duration-300 hover:scale-110"
                     aria-label="Email"
                   >
@@ -1288,7 +1407,7 @@ export default function Home() {
                   </a>
 
                   <a
-                    href="https://github.com/alexjohnson"
+                    href="https://github.com/dhruvsoni"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group relative w-16 h-16 rounded-2xl bg-gradient-to-r from-slate-700 to-slate-900 flex items-center justify-center hover:shadow-lg hover:shadow-slate-500/25 transition-all duration-300 hover:scale-110"
@@ -1298,7 +1417,7 @@ export default function Home() {
                   </a>
 
                   <a
-                    href="https://linkedin.com/in/alexjohnson"
+                    href="https://linkedin.com/in/dhruvsoni"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group relative w-16 h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 flex items-center justify-center hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300 hover:scale-110"
@@ -1316,6 +1435,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+
       {/* Footer - Enhanced */}
       <footer className="py-16 border-t border-slate-200/50 dark:border-slate-800/50 transition-colors duration-500 relative overflow-hidden bg-gradient-to-b from-transparent to-slate-100/50 dark:to-slate-950/50">
         {/* Background elements */}
@@ -1652,5 +1772,6 @@ export default function Home() {
         }
       `}</style>
     </main>
+    
   );
 }
